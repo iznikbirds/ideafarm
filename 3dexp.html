@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iznik Hotel Lobby</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #reticle {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        #reticle::before,
+        #reticle::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        #reticle::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+            top: 0;
+        }
+        #reticle::after {
+            width: 20px;
+            height: 2px;
+            left: 0;
+            top: 9px;
+        }
+        #instructions {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="reticle"></div>
+    <div id="instructions">Click to start<br>WASD to move<br>Mouse to look<br>Space to jump<br>ESC to pause</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Iznik-inspired colors
+        const colors = {
+            turquoise: '#1abc9c',
+            cobalt: '#2980b9',
+            white: '#ecf0f1',
+            red: '#e74c3c'
+        };
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(colors.white, 0.5);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(colors.white, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // Create Iznik-inspired floor texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw Iznik pattern
+        ctx.fillStyle = colors.white;
+        ctx.fillRect(0, 0, 512, 512);
+        
+        // Draw decorative elements
+        ctx.strokeStyle = colors.cobalt;
+        ctx.lineWidth = 2;
+        
+        // Draw birds
+        function drawBird(x, y) {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.quadraticCurveTo(x + 20, y - 20, x + 40, y);
+            ctx.quadraticCurveTo(x + 20, y + 20, x, y);
+            ctx.stroke();
+        }
+        
+        // Draw plants
+        function drawPlant(x, y) {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.quadraticCurveTo(x + 10, y - 30, x + 20, y);
+            ctx.quadraticCurveTo(x + 10, y + 30, x, y);
+            ctx.stroke();
+        }
+        
+        // Add patterns
+        for(let i = 0; i < 8; i++) {
+            for(let j = 0; j < 8; j++) {
+                drawBird(i * 64, j * 64);
+                drawPlant(i * 64 + 32, j * 64 + 32);
+            }
+        }
+        
+        const floorTexture = new THREE.CanvasTexture(canvas);
+        floorTexture.wrapS = THREE.RepeatWrapping;
+        floorTexture.wrapT = THREE.RepeatWrapping;
+        floorTexture.repeat.set(4, 4);
+
+        // Floor
+        const floorGeometry = new THREE.PlaneGeometry(40, 40);
+        const floorMaterial = new THREE.MeshPhongMaterial({ 
+            map: floorTexture,
+            side: THREE.DoubleSide
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Ceiling (doubled height)
+        const ceilingGeometry = new THREE.PlaneGeometry(40, 40);
+        const ceilingMaterial = new THREE.MeshPhongMaterial({ 
+            color: colors.white,
+            side: THREE.DoubleSide
+        });
+        const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+        ceiling.rotation.x = -Math.PI / 2;
+        ceiling.position.y = 16; // Doubled height
+        ceiling.receiveShadow = true;
+        scene.add(ceiling);
+
+        // Walls
+        function createWall(width, height, depth, x, y, z, color) {
+            const geometry = new THREE.BoxGeometry(width, height, depth);
+            const material = new THREE.MeshPhongMaterial({ color: color });
+            const wall = new THREE.Mesh(geometry, material);
+            wall.position.set(x, y, z);
+            wall.castShadow = true;
+            wall.receiveShadow = true;
+            scene.add(wall);
+            return wall;
+        }
+
+        // Create lobby walls (with doubled height)
+        const walls = [
+            createWall(40, 16, 0.5, 0, 8, -20, colors.cobalt), // Back wall
+            createWall(40, 16, 0.5, 0, 8, 20, colors.cobalt),  // Front wall
+            createWall(0.5, 16, 40, -20, 8, 0, colors.cobalt), // Left wall
+            createWall(0.5, 16, 40, 20, 8, 0, colors.cobalt),  // Right wall
+        ];
+
+        // Reception desk
+        const deskGeometry = new THREE.BoxGeometry(6, 1, 2);
+        const deskMaterial = new THREE.MeshPhongMaterial({ color: colors.red });
+        const desk = new THREE.Mesh(deskGeometry, deskMaterial);
+        desk.position.set(0, 0.5, -8);
+        desk.castShadow = true;
+        desk.receiveShadow = true;
+        scene.add(desk);
+
+        // Create tunnel
+        const tunnelLength = 40; // Full room length
+        const tunnelWidth = 2; // Narrower tunnel
+        const tunnelHeight = 8; // Taller tunnel
+        
+        // Tunnel interior
+        const tunnelWallMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+        
+        // Left wall
+        const leftWall = new THREE.Mesh(
+            new THREE.BoxGeometry(0.5, tunnelHeight, tunnelLength),
+            tunnelWallMaterial
+        );
+        leftWall.position.set(-tunnelWidth/2, tunnelHeight/2, -20 - tunnelLength/2);
+        leftWall.castShadow = true;
+        leftWall.receiveShadow = true;
+        scene.add(leftWall);
+        
+        // Right wall
+        const rightWall = new THREE.Mesh(
+            new THREE.BoxGeometry(0.5, tunnelHeight, tunnelLength),
+            tunnelWallMaterial
+        );
+        rightWall.position.set(tunnelWidth/2, tunnelHeight/2, -20 - tunnelLength/2);
+        rightWall.castShadow = true;
+        rightWall.receiveShadow = true;
+        scene.add(rightWall);
+        
+        // Tunnel ceiling
+        const tunnelCeiling = new THREE.Mesh(
+            new THREE.BoxGeometry(tunnelWidth, 0.5, tunnelLength),
+            tunnelWallMaterial
+        );
+        tunnelCeiling.position.set(0, tunnelHeight, -20 - tunnelLength/2);
+        tunnelCeiling.castShadow = true;
+        tunnelCeiling.receiveShadow = true;
+        scene.add(tunnelCeiling);
+        
+        // Tunnel floor
+        const tunnelFloor = new THREE.Mesh(
+            new THREE.BoxGeometry(tunnelWidth, 0.5, tunnelLength),
+            tunnelWallMaterial
+        );
+        tunnelFloor.position.set(0, 0, -20 - tunnelLength/2);
+        tunnelFloor.castShadow = true;
+        tunnelFloor.receiveShadow = true;
+        scene.add(tunnelFloor);
+
+        // Red room (smaller version of main room)
+        const redRoomSize = 20;
+        const redRoomWalls = [
+            createWall(redRoomSize, 16, 0.5, 0, 8, -20 - tunnelLength - redRoomSize/2, colors.red), // Back wall
+            createWall(redRoomSize, 16, 0.5, 0, 8, -20 - tunnelLength + redRoomSize/2, colors.red),  // Front wall
+            createWall(0.5, 16, redRoomSize, -redRoomSize/2, 8, -20 - tunnelLength, colors.red), // Left wall
+            createWall(0.5, 16, redRoomSize, redRoomSize/2, 8, -20 - tunnelLength, colors.red),  // Right wall
+        ];
+
+        // Red room floor
+        const redRoomFloor = new THREE.Mesh(
+            new THREE.PlaneGeometry(redRoomSize, redRoomSize),
+            new THREE.MeshPhongMaterial({ color: colors.red })
+        );
+        redRoomFloor.rotation.x = Math.PI / 2;
+        redRoomFloor.position.set(0, 0, -20 - tunnelLength);
+        redRoomFloor.receiveShadow = true;
+        scene.add(redRoomFloor);
+
+        // Red room ceiling
+        const redRoomCeiling = new THREE.Mesh(
+            new THREE.PlaneGeometry(redRoomSize, redRoomSize),
+            new THREE.MeshPhongMaterial({ color: colors.red })
+        );
+        redRoomCeiling.rotation.x = -Math.PI / 2;
+        redRoomCeiling.position.set(0, 16, -20 - tunnelLength);
+        redRoomCeiling.receiveShadow = true;
+        scene.add(redRoomCeiling);
+
+        // El Club sign (fixed reflection)
+        const signCanvas = document.createElement('canvas');
+        signCanvas.width = 1024;
+        signCanvas.height = 256;
+        const signCtx = signCanvas.getContext('2d');
+        signCtx.fillStyle = 'white';
+        signCtx.font = 'bold 160px Arial';
+        signCtx.textAlign = 'center';
+        signCtx.textBaseline = 'middle';
+        signCtx.fillText('El Club', signCanvas.width/2, signCanvas.height/2);
+        
+        const signTexture = new THREE.CanvasTexture(signCanvas);
+        const signMaterial = new THREE.MeshBasicMaterial({
+            map: signTexture,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+        
+        const sign = new THREE.Mesh(
+            new THREE.PlaneGeometry(8, 2),
+            signMaterial
+        );
+        sign.position.set(0, 12, -19.5);
+        sign.rotation.y = Math.PI;
+        scene.add(sign);
+
+        // Dynamic lighting for tunnel
+        const tunnelLight = new THREE.PointLight(0xffffff, 1, 15);
+        tunnelLight.position.set(0, 4, -20);
+        scene.add(tunnelLight);
+
+        // Additional light for red room
+        const redRoomLight = new THREE.PointLight(0xff0000, 0.5, 20);
+        redRoomLight.position.set(0, 8, -20 - tunnelLength);
+        scene.add(redRoomLight);
+
+        // Movement controls
+        const moveSpeed = 0.1;
+        const sprintSpeed = 0.2;
+        const keys = {
+            w: false,
+            a: false,
+            s: false,
+            d: false,
+            space: false
+        };
+        let isSprinting = false;
+        let lastWPress = 0;
+        const doubleTapWindow = 300; // milliseconds
+
+        // Collision detection
+        const playerRadius = 0.5;
+        const playerHeight = 1.6;
+        let isGrounded = true;
+        let velocity = 0;
+        const jumpForce = 0.25;
+        const gravity = 0.015;
+
+        // Define collision objects
+        const collisionObjects = [
+            {
+                type: 'box',
+                position: new THREE.Vector3(0, 0.5, -8),
+                size: new THREE.Vector3(6, 1, 2),
+                isDesk: true
+            }
+        ];
+
+        function checkCollision(newPosition) {
+            // Wall collisions with tunnel exception
+            if (Math.abs(newPosition.x) > 19) {
+                return true;
+            }
+            
+            // Front wall collision
+            if (newPosition.z > 19) {
+                return true;
+            }
+            
+            // Back wall collision with tunnel exception
+            if (newPosition.z < -19) {
+                // Check if we're in the tunnel area
+                if (Math.abs(newPosition.x) < tunnelWidth/2) {
+                    return false; // Allow passage through tunnel
+                }
+                return true;
+            }
+
+            // Red room collisions
+            if (newPosition.z < -20 - tunnelLength) {
+                // Check if we're in the red room
+                if (Math.abs(newPosition.x) > redRoomSize/2) {
+                    return true; // Block movement outside red room width
+                }
+                if (newPosition.z < -20 - tunnelLength - redRoomSize/2) {
+                    return true; // Block movement at back of red room
+                }
+                return false; // Allow free movement within red room
+            }
+
+            // Tunnel collisions
+            if (newPosition.z < -20 && newPosition.z > -20 - tunnelLength) {
+                if (Math.abs(newPosition.x) > tunnelWidth/2) {
+                    return true; // Block movement outside tunnel width
+                }
+                return false; // Allow movement within tunnel
+            }
+
+            // Object collisions with improved detection
+            for (const obj of collisionObjects) {
+                if (obj.type === 'box') {
+                    const dx = Math.abs(newPosition.x - obj.position.x);
+                    const dz = Math.abs(newPosition.z - obj.position.z);
+                    
+                    // Always check horizontal collisions
+                    if (dx < (obj.size.x/2 + playerRadius) && 
+                        dz < (obj.size.z/2 + playerRadius)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function checkGroundCollision() {
+            isGrounded = false;
+            
+            // Check if standing on objects with improved detection
+            for (const obj of collisionObjects) {
+                if (obj.type === 'box') {
+                    const dx = Math.abs(camera.position.x - obj.position.x);
+                    const dz = Math.abs(camera.position.z - obj.position.z);
+                    
+                    if (dx < (obj.size.x/2 + playerRadius) && 
+                        dz < (obj.size.z/2 + playerRadius)) {
+                        
+                        // Check if we're above the object
+                        if (camera.position.y > obj.position.y) {
+                            // If we're falling and close to the object top
+                            if (velocity < 0 && 
+                                Math.abs(camera.position.y - (obj.position.y + obj.size.y/2)) < 0.5) {
+                                camera.position.y = obj.position.y + obj.size.y/2;
+                                velocity = 0;
+                                isGrounded = true;
+                                break; // Stop checking once we've found ground
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Ground collision
+            if (camera.position.y < playerHeight) {
+                camera.position.y = playerHeight;
+                velocity = 0;
+                isGrounded = true;
+            }
+        }
+
+        // Update lighting based on player position
+        function updateLighting() {
+            const distanceFromTunnelStart = Math.abs(camera.position.z + 20);
+            const maxDistance = tunnelLength;
+            const intensity = Math.max(0.2, 1 - (distanceFromTunnelStart / maxDistance));
+            tunnelLight.intensity = intensity;
+        }
+
+        // Mouse look controls
+        let pitch = 0;
+        let yaw = 0;
+        const mouseSensitivity = 0.002;
+        let isPointerLocked = false;
+
+        const instructions = document.getElementById('instructions');
+        const reticle = document.getElementById('reticle');
+        reticle.style.display = 'none';
+
+        // Pointer lock controls
+        document.addEventListener('click', () => {
+            if (!isPointerLocked) {
+                renderer.domElement.requestPointerLock();
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            isPointerLocked = document.pointerLockElement === renderer.domElement;
+            instructions.style.display = isPointerLocked ? 'none' : 'block';
+            reticle.style.display = isPointerLocked ? 'block' : 'none';
+        });
+
+        document.addEventListener('mousemove', (event) => {
+            if (isPointerLocked) {
+                // Minecraft-style camera control
+                yaw -= event.movementX * mouseSensitivity;
+                // Reverse the vertical movement
+                pitch += event.movementY * mouseSensitivity;
+                
+                // Clamp pitch to prevent over-rotation
+                pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+            }
+        });
+
+        // Set initial camera position
+        camera.position.set(0, 1.6, 5);
+        camera.lookAt(0, 1.6, 0);
+
+        // Event listeners for movement
+        document.addEventListener('keydown', (event) => {
+            if (keys.hasOwnProperty(event.key.toLowerCase())) {
+                keys[event.key.toLowerCase()] = true;
+                
+                // Handle double-tap sprint
+                if (event.key.toLowerCase() === 'w') {
+                    const now = Date.now();
+                    if (now - lastWPress < doubleTapWindow) {
+                        isSprinting = true;
+                    }
+                    lastWPress = now;
+                }
+            }
+            if (event.code === 'Space') {
+                keys.space = true;
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            if (keys.hasOwnProperty(event.key.toLowerCase())) {
+                keys[event.key.toLowerCase()] = false;
+                if (event.key.toLowerCase() === 'w') {
+                    isSprinting = false;
+                }
+            }
+            if (event.code === 'Space') {
+                keys.space = false;
+            }
+        });
+
+        // Movement function
+        function movePlayer() {
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            direction.y = 0; // Keep movement horizontal
+            direction.normalize();
+
+            const moveX = new THREE.Vector3(-direction.z, 0, direction.x);
+            let newPosition = camera.position.clone();
+            const currentSpeed = isSprinting ? sprintSpeed : moveSpeed;
+
+            // Calculate intended movement
+            if (keys.w) newPosition.add(direction.multiplyScalar(currentSpeed));
+            if (keys.s) newPosition.add(direction.multiplyScalar(-currentSpeed));
+            if (keys.a) newPosition.add(moveX.multiplyScalar(-currentSpeed));
+            if (keys.d) newPosition.add(moveX.multiplyScalar(currentSpeed));
+
+            // Check collisions before moving
+            if (!checkCollision(newPosition)) {
+                camera.position.copy(newPosition);
+            }
+
+            // Jumping
+            if (keys.space && isGrounded) {
+                velocity = jumpForce;
+                isGrounded = false;
+            }
+
+            // Apply gravity
+            velocity -= gravity;
+            camera.position.y += velocity;
+
+            // Check ground and object collisions
+            checkGroundCollision();
+        }
+
+        // Update camera rotation based on mouse movement
+        function updateCameraRotation() {
+            if (isPointerLocked) {
+                // Reset camera rotation
+                camera.rotation.set(0, 0, 0);
+                
+                // Apply rotations in the correct order
+                camera.rotateY(yaw);
+                camera.rotateX(pitch);
+            }
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            movePlayer();
+            updateCameraRotation();
+            updateLighting();
+            renderer.render(scene, camera);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>

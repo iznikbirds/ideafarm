@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Price Optimizer</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #34495e;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .item-row {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+        .add-item-btn {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .add-item-btn:hover {
+            background-color: #27ae60;
+        }
+        .submit-btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        .submit-btn:hover {
+            background-color: #2980b9;
+        }
+        .results-section {
+            margin-top: 30px;
+            display: none;
+        }
+        .profit {
+            color: #27ae60;
+        }
+        .revenue {
+            color: #2980b9;
+        }
+        /* New table styles */
+        .input-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        .input-table td {
+            padding: 8px;
+            vertical-align: top;
+        }
+        .input-table td:first-child {
+            width: 30%;
+            font-weight: bold;
+            color: #34495e;
+        }
+        .input-table input {
+            width: 100%;
+        }
+        .date-inputs {
+            display: flex;
+            gap: 10px;
+        }
+        .date-inputs input {
+            width: calc(50% - 5px);
+        }
+        /* Results table styles */
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .results-table th, .results-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .results-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .results-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .positive-change {
+            color: #27ae60;
+        }
+        .negative-change {
+            color: #e74c3c;
+        }
+        .item-header {
+            background-color: #3498db;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Restaurant Price Optimizer</h1>
+        
+        <form id="priceOptimizerForm">
+            <div id="itemsContainer">
+                <!-- Initial three rows will be added here -->
+            </div>
+            
+            <button type="button" class="add-item-btn" onclick="addNewItem()">+ Add Another Item</button>
+            <button type="submit" class="submit-btn">Generate Price Test Plan</button>
+        </form>
+
+        <div id="experimentPlan" class="results-section">
+            <h2>A/B Testing Experiment Plan</h2>
+            <div id="experimentDetails"></div>
+        </div>
+
+        <div id="resultsInput" class="results-section">
+            <h2>Experiment Results</h2>
+            <form id="resultsForm">
+                <div id="resultsContainer"></div>
+                <button type="submit" class="submit-btn">Calculate Optimal Prices</button>
+            </form>
+        </div>
+
+        <div id="optimalPrices" class="results-section">
+            <h2>Optimal Price Recommendations</h2>
+            <div id="recommendations"></div>
+        </div>
+    </div>
+
+    <script>
+        // Store the experiment plan globally so it can be accessed when recalculating
+        let globalExperimentPlan = [];
+
+        // Initialize the form with three rows
+        window.onload = function() {
+            for (let i = 0; i < 3; i++) {
+                addNewItem();
+            }
+        };
+
+        function addNewItem() {
+            const container = document.getElementById('itemsContainer');
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'item-row';
+            
+            // Create a table for the inputs
+            const table = document.createElement('table');
+            table.className = 'input-table';
+            
+            // Item Name Row (moved to top)
+            const itemRow = document.createElement('tr');
+            itemRow.innerHTML = `
+                <td>Item Name</td>
+                <td><input type="text" name="itemName[]" required></td>
+            `;
+            
+            // Date Range Row
+            const dateRow = document.createElement('tr');
+            dateRow.innerHTML = `
+                <td>Date Range</td>
+                <td>
+                    <div class="date-inputs">
+                        <input type="date" name="startDate[]" placeholder="Start Date" required>
+                        <input type="date" name="endDate[]" placeholder="End Date" required>
+                    </div>
+                </td>
+            `;
+            
+            // COGS Row
+            const cogsRow = document.createElement('tr');
+            cogsRow.innerHTML = `
+                <td>Product COGS ($)</td>
+                <td><input type="number" step="0.01" name="cogs[]" required onchange="calculateMetrics(this)"></td>
+            `;
+            
+            // Price Row
+            const priceRow = document.createElement('tr');
+            priceRow.innerHTML = `
+                <td>Current Listed Price ($)</td>
+                <td><input type="number" step="0.01" name="price[]" required onchange="calculateMetrics(this)"></td>
+            `;
+            
+            // Quantity Row
+            const quantityRow = document.createElement('tr');
+            quantityRow.innerHTML = `
+                <td>Quantity Sold</td>
+                <td><input type="number" name="quantity[]" required onchange="calculateMetrics(this)"></td>
+            `;
+            
+            // Metrics Row
+            const metricsRow = document.createElement('tr');
+            metricsRow.innerHTML = `
+                <td>Calculated Metrics</td>
+                <td>
+                    <div class="form-group">
+                        <label>Revenue ($)</label>
+                        <input type="number" step="0.01" name="revenue[]" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Profit ($)</label>
+                        <input type="number" step="0.01" name="profit[]" readonly>
+                    </div>
+                </td>
+            `;
+            
+            // Add all rows to the table
+            table.appendChild(itemRow);
+            table.appendChild(dateRow);
+            table.appendChild(cogsRow);
+            table.appendChild(priceRow);
+            table.appendChild(quantityRow);
+            table.appendChild(metricsRow);
+            
+            // Add the table to the item div
+            itemDiv.appendChild(table);
+            container.appendChild(itemDiv);
+        }
+
+        function calculateMetrics(input) {
+            const row = input.parentElement.parentElement;
+            const cogs = parseFloat(row.querySelector('[name="cogs[]"]').value) || 0;
+            const price = parseFloat(row.querySelector('[name="price[]"]').value) || 0;
+            const quantity = parseInt(row.querySelector('[name="quantity[]"]').value) || 0;
+            
+            const revenue = price * quantity;
+            const profit = (price - cogs) * quantity;
+            
+            // Find the metrics inputs in the same row
+            const metricsRow = row.parentElement.querySelector('tr:last-child');
+            const revenueInput = metricsRow.querySelector('[name="revenue[]"]');
+            const profitInput = metricsRow.querySelector('[name="profit[]"]');
+            
+            revenueInput.value = revenue.toFixed(2);
+            profitInput.value = profit.toFixed(2);
+        }
+
+        document.getElementById('priceOptimizerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            generateExperimentPlan();
+        });
+
+        function generateExperimentPlan() {
+            const items = [];
+            const rows = document.querySelectorAll('.item-row');
+            
+            rows.forEach(row => {
+                const item = {
+                    name: row.querySelector('[name="itemName[]"]').value,
+                    currentPrice: parseFloat(row.querySelector('[name="price[]"]').value),
+                    cogs: parseFloat(row.querySelector('[name="cogs[]"]').value),
+                    quantity: parseInt(row.querySelector('[name="quantity[]"]').value),
+                    startDate: row.querySelector('[name="startDate[]"]').value,
+                    endDate: row.querySelector('[name="endDate[]"]').value
+                };
+                items.push(item);
+            });
+
+            // Generate 4 different price tests for each item
+            const experimentPlan = items.map(item => {
+                const basePrice = item.currentPrice;
+                
+                // Generate 4 different price points for testing
+                // Using a more sophisticated approach with different price variations
+                const priceA = (basePrice * 0.85).toFixed(2);  // 15% lower
+                const priceB = (basePrice * 0.95).toFixed(2);  // 5% lower
+                const priceC = (basePrice * 1.05).toFixed(2);  // 5% higher
+                const priceD = (basePrice * 1.15).toFixed(2);  // 15% higher
+                
+                return {
+                    item: item.name,
+                    currentPrice: basePrice.toFixed(2),
+                    testPriceA: priceA,
+                    testPriceB: priceB,
+                    testPriceC: priceC,
+                    testPriceD: priceD,
+                    cogs: item.cogs,
+                    quantity: item.quantity,
+                    startDate: item.startDate,
+                    endDate: item.endDate,
+                    duration: "1 week each"
+                };
+            });
+
+            // Store the experiment plan globally
+            globalExperimentPlan = experimentPlan;
+            
+            displayExperimentPlan(experimentPlan);
+        }
+
+        function displayExperimentPlan(plan) {
+            const experimentDetails = document.getElementById('experimentDetails');
+            experimentDetails.innerHTML = `
+                <h3>4-Week Price Testing Schedule</h3>
+                <p>For each item, test four different prices over 4 weeks:</p>
+                <ul>
+                    ${plan.map(item => `
+                        <li>
+                            <strong>${item.item}</strong><br>
+                            Current Price: $${item.currentPrice}<br>
+                            Week 1: Test Price A: $${item.testPriceA} (15% lower)<br>
+                            Week 2: Test Price B: $${item.testPriceB} (5% lower)<br>
+                            Week 3: Test Price C: $${item.testPriceC} (5% higher)<br>
+                            Week 4: Test Price D: $${item.testPriceD} (15% higher)
+                        </li>
+                    `).join('')}
+                </ul>
+                <p>Please collect sales data for each price point and submit the results below.</p>
+            `;
+
+            document.getElementById('experimentPlan').style.display = 'block';
+            document.getElementById('resultsInput').style.display = 'block';
+            setupResultsForm(plan);
+        }
+
+        function setupResultsForm(plan) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            resultsContainer.innerHTML = plan.map(item => `
+                <div class="item-row">
+                    <div class="item-header">${item.item}</div>
+                    <table class="input-table">
+                        <tr>
+                            <td>Sales at Price A ($${item.testPriceA})</td>
+                            <td><input type="number" name="salesA_${item.item}" required></td>
+                        </tr>
+                        <tr>
+                            <td>Sales at Price B ($${item.testPriceB})</td>
+                            <td><input type="number" name="salesB_${item.item}" required></td>
+                        </tr>
+                        <tr>
+                            <td>Sales at Price C ($${item.testPriceC})</td>
+                            <td><input type="number" name="salesC_${item.item}" required></td>
+                        </tr>
+                        <tr>
+                            <td>Sales at Price D ($${item.testPriceD})</td>
+                            <td><input type="number" name="salesD_${item.item}" required></td>
+                        </tr>
+                    </table>
+                </div>
+            `).join('');
+
+            document.getElementById('resultsForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                calculateOptimalPrices(globalExperimentPlan);
+            });
+        }
+
+        function calculateOptimalPrices(plan) {
+            const recommendations = plan.map(item => {
+                // Get sales data for all four price points
+                const salesA = parseInt(document.querySelector(`[name="salesA_${item.item}"]`).value);
+                const salesB = parseInt(document.querySelector(`[name="salesB_${item.item}"]`).value);
+                const salesC = parseInt(document.querySelector(`[name="salesC_${item.item}"]`).value);
+                const salesD = parseInt(document.querySelector(`[name="salesD_${item.item}"]`).value);
+                
+                const priceA = parseFloat(item.testPriceA);
+                const priceB = parseFloat(item.testPriceB);
+                const priceC = parseFloat(item.testPriceC);
+                const priceD = parseFloat(item.testPriceD);
+                const cogs = parseFloat(item.cogs);
+                
+                // Calculate daily metrics for each price point
+                const revenueA = salesA * priceA;
+                const revenueB = salesB * priceB;
+                const revenueC = salesC * priceC;
+                const revenueD = salesD * priceD;
+                
+                const profitA = salesA * (priceA - cogs);
+                const profitB = salesB * (priceB - cogs);
+                const profitC = salesC * (priceC - cogs);
+                const profitD = salesD * (priceD - cogs);
+                
+                // Calculate margins for each price point
+                const marginA = ((priceA - cogs) / priceA) * 100;
+                const marginB = ((priceB - cogs) / priceB) * 100;
+                const marginC = ((priceC - cogs) / priceC) * 100;
+                const marginD = ((priceD - cogs) / priceD) * 100;
+                const currentMargin = ((parseFloat(item.currentPrice) - cogs) / parseFloat(item.currentPrice)) * 100;
+                
+                // Use a more sophisticated algorithm to find the optimal price
+                // This algorithm uses price elasticity and profit maximization
+                const optimalPrice = findOptimalPrice(
+                    [
+                        { price: priceA, sales: salesA, profit: profitA },
+                        { price: priceB, sales: salesB, profit: profitB },
+                        { price: priceC, sales: salesC, profit: profitC },
+                        { price: priceD, sales: salesD, profit: profitD }
+                    ],
+                    cogs
+                );
+                
+                // Calculate optimal metrics based on the interpolated optimal price
+                const optimalMargin = ((optimalPrice - cogs) / optimalPrice) * 100;
+                
+                // Estimate optimal sales using price elasticity
+                const optimalSales = estimateOptimalSales(
+                    [
+                        { price: priceA, sales: salesA },
+                        { price: priceB, sales: salesB },
+                        { price: priceC, sales: salesC },
+                        { price: priceD, sales: salesD }
+                    ],
+                    optimalPrice
+                );
+                
+                const optimalProfit = optimalSales * (optimalPrice - cogs);
+                
+                // Calculate monthly metrics (assuming the test period is 1 week)
+                const daysInTest = 7; // 1 week
+                const daysInMonth = 30;
+                const monthlySales = (optimalSales / daysInTest) * daysInMonth;
+                const monthlyProfit = (optimalProfit / daysInTest) * daysInMonth;
+                
+                // Calculate current monthly profit for comparison
+                const currentMonthlySales = (item.quantity / daysInTest) * daysInMonth;
+                const currentMonthlyProfit = currentMonthlySales * (parseFloat(item.currentPrice) - cogs);
+                
+                // Calculate profit increase
+                const profitIncrease = monthlyProfit - currentMonthlyProfit;
+                const profitIncreasePercent = currentMonthlyProfit > 0 ? (profitIncrease / currentMonthlyProfit) * 100 : 0;
+                
+                // Calculate margin increase
+                const marginIncrease = optimalMargin - currentMargin;
+                
+                return {
+                    item: item.item,
+                    currentPrice: parseFloat(item.currentPrice),
+                    optimalPrice: optimalPrice,
+                    currentMargin: currentMargin.toFixed(2),
+                    optimalMargin: optimalMargin.toFixed(2),
+                    marginIncrease: marginIncrease.toFixed(2),
+                    monthlyProfitIncrease: profitIncrease.toFixed(2),
+                    monthlyProfitIncreasePercent: profitIncreasePercent.toFixed(2)
+                };
+            });
+
+            displayRecommendations(recommendations);
+        }
+
+        // Function to find the optimal price using price elasticity and profit maximization
+        function findOptimalPrice(pricePoints, cogs) {
+            // Sort price points by price
+            pricePoints.sort((a, b) => a.price - b.price);
+            
+            // Calculate price elasticity for each interval
+            const elasticities = [];
+            for (let i = 0; i < pricePoints.length - 1; i++) {
+                const priceChange = (pricePoints[i+1].price - pricePoints[i].price) / pricePoints[i].price;
+                const quantityChange = (pricePoints[i+1].sales - pricePoints[i].sales) / pricePoints[i].sales;
+                
+                // Avoid division by zero
+                if (priceChange !== 0) {
+                    const elasticity = Math.abs(quantityChange / priceChange);
+                    elasticities.push({
+                        elasticity: elasticity,
+                        priceRange: [pricePoints[i].price, pricePoints[i+1].price],
+                        profitRange: [pricePoints[i].profit, pricePoints[i+1].profit]
+                    });
+                }
+            }
+            
+            // Find the interval with the highest profit
+            let maxProfit = -Infinity;
+            let optimalPrice = pricePoints[0].price;
+            
+            // Check each price point
+            pricePoints.forEach(point => {
+                if (point.profit > maxProfit) {
+                    maxProfit = point.profit;
+                    optimalPrice = point.price;
+                }
+            });
+            
+            // If we have elasticity data, use it to refine the optimal price
+            if (elasticities.length > 0) {
+                // Find the interval with the highest profit
+                const maxProfitInterval = elasticities.reduce((max, current) => {
+                    return (current.profitRange[1] > max.profitRange[1]) ? current : max;
+                });
+                
+                // If the highest profit is at one of the endpoints, we might want to extrapolate
+                if (maxProfitInterval.profitRange[1] > maxProfitInterval.profitRange[0]) {
+                    // The optimal price might be higher than our highest test price
+                    // Use elasticity to estimate where profit would peak
+                    const elasticity = maxProfitInterval.elasticity;
+                    
+                    // For a linear demand curve, the optimal price is at the midpoint of the price range
+                    // For a more realistic model, we can use the elasticity to adjust this
+                    const priceRange = maxProfitInterval.priceRange[1] - maxProfitInterval.priceRange[0];
+                    const estimatedOptimalPrice = maxProfitInterval.priceRange[0] + (priceRange / 2);
+                    
+                    // Ensure the estimated price is reasonable (not too far from our test prices)
+                    const maxDeviation = 0.2; // 20% deviation from test prices
+                    const minPrice = Math.min(...pricePoints.map(p => p.price)) * (1 - maxDeviation);
+                    const maxPrice = Math.max(...pricePoints.map(p => p.price)) * (1 + maxDeviation);
+                    
+                    optimalPrice = Math.max(minPrice, Math.min(maxPrice, estimatedOptimalPrice));
+                }
+            }
+            
+            return optimalPrice;
+        }
+
+        // Function to estimate optimal sales based on price elasticity
+        function estimateOptimalSales(pricePoints, optimalPrice) {
+            // Sort price points by price
+            pricePoints.sort((a, b) => a.price - b.price);
+            
+            // Find the two closest price points to our optimal price
+            let lowerPoint = null;
+            let upperPoint = null;
+            
+            for (let i = 0; i < pricePoints.length; i++) {
+                if (pricePoints[i].price <= optimalPrice) {
+                    lowerPoint = pricePoints[i];
+                } else {
+                    upperPoint = pricePoints[i];
+                    break;
+                }
+            }
+            
+            // If optimal price is outside our test range, use the closest point
+            if (!lowerPoint) {
+                return pricePoints[0].sales;
+            }
+            if (!upperPoint) {
+                return pricePoints[pricePoints.length - 1].sales;
+            }
+            
+            // Linear interpolation between the two closest points
+            const priceRatio = (optimalPrice - lowerPoint.price) / (upperPoint.price - lowerPoint.price);
+            const salesDiff = upperPoint.sales - lowerPoint.sales;
+            
+            return lowerPoint.sales + (priceRatio * salesDiff);
+        }
+
+        function displayRecommendations(recommendations) {
+            const recommendationsDiv = document.getElementById('recommendations');
+            recommendationsDiv.innerHTML = `
+                <h3>Price Recommendations</h3>
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Current Price</th>
+                            <th>Recommended Price</th>
+                            <th>Current Margin</th>
+                            <th>New Margin</th>
+                            <th>Margin Increase</th>
+                            <th>Monthly Profit Increase</th>
+                            <th>Profit Increase %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${recommendations.map(rec => `
+                            <tr>
+                                <td><strong>${rec.item}</strong></td>
+                                <td>$${rec.currentPrice.toFixed(2)}</td>
+                                <td>$${rec.optimalPrice.toFixed(2)}</td>
+                                <td>${rec.currentMargin}%</td>
+                                <td>${rec.optimalMargin}%</td>
+                                <td class="${parseFloat(rec.marginIncrease) >= 0 ? 'positive-change' : 'negative-change'}">
+                                    ${rec.marginIncrease}%
+                                </td>
+                                <td class="${parseFloat(rec.monthlyProfitIncrease) >= 0 ? 'positive-change' : 'negative-change'}">
+                                    $${rec.monthlyProfitIncrease}
+                                </td>
+                                <td class="${parseFloat(rec.monthlyProfitIncreasePercent) >= 0 ? 'positive-change' : 'negative-change'}">
+                                    ${rec.monthlyProfitIncreasePercent}%
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            document.getElementById('optimalPrices').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
+
